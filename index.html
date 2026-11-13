@@ -54,6 +54,7 @@ textarea{min-height:80px;resize:vertical}
 .big small{font-family:var(--fb);font-size:13px;font-weight:500;opacity:.85}
 .big:disabled{opacity:.6}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.xlbox{display:grid;gap:8px;border:1px dashed var(--line,#cbd5e1);border-radius:14px;padding:12px;background:rgba(16,185,129,.05)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{position:relative} .chip input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .chip span{display:inline-block;padding:7px 13px;border:1px solid var(--line);border-radius:999px;font-size:14px;background:var(--bg)}
@@ -391,7 +392,9 @@ function viewMine(){const st=S.state,me=S.me;const y=new Date().getFullYear();
     <div class="grid"><label class="f" for="nMonth">الشهر<select id="nMonth">${MONTHS.map((m,i)=>`<option value="${i+1}" ${i===now.getMonth()?"selected":""}>${MONTHS_AR[i]} — ${m}</option>`).join("")}</select></label>
      <label class="f" for="nYear">السنة<select id="nYear">${[y-1,y,y+1].map(v=>`<option ${v===y?"selected":""}>${v}</option>`).join("")}</select></label>
      <label class="f" for="nTravel">نوع السفر<select id="nTravel"><option value="Domestic">داخلي — Domestic</option><option value="International">دولي — International</option></select></label></div>
-    <button class="btn p" id="nGo" type="button">ابدأ الشيت</button></section>
+    <button class="btn p" id="nGo" type="button">ابدأ الشيت</button>
+    <div class="xlbox"><b>📗 تحب تملاه على Excel؟</b><div class="small muted">نزّل التمبلت جاهز ببياناتك والشهر اللي فوق، املا البنود، وارفعه هنا — هيتحوّل لشيت تراجعه وتبعته.</div>
+     <div class="row"><button class="btn g" id="nTpl" type="button">⬇️ نزّل التمبلت</button><label class="btn g" for="nUp" style="cursor:pointer">📤 ارفع الشيت المتعبّي</label><input type="file" id="nUp" accept=".xlsx,.xls" hidden></div><div id="nUpMsg" class="small"></div></div></section>
    <section class="card"><div class="ch"><h2>شيتاتي</h2><span class="pill pn num">${st.mine.length}</span></div>
     ${st.mine.length?`<div class="vlist">${st.mine.map(sheetItem).join("")}</div>`:`<div class="empty">لسه مفيش شيتات — ابدأ أول شيت من فوق</div>`}</section>`;}
 function sheetItem(s,who){return `<button type="button" class="vi prow" data-open="${esc(s.id)}" style="text-align:start;cursor:pointer;font:inherit;color:inherit">
@@ -437,7 +440,8 @@ function viewEditor(){const E=S.ed,x=E.x,mgr=E.mode==="mgr";
      <input data-l="${i}" data-k="desc" value="${esc(l.desc||"")}" placeholder="الوصف / ملاحظات" ${dis} aria-label="الوصف">
      <input data-l="${i}" data-k="amount" type="number" step="0.01" min="0" inputmode="decimal" value="${l.amount===""||l.amount==null?"":l.amount}" placeholder="المبلغ" ${dis||fx!=null?"disabled":""} class="num" aria-label="المبلغ">
      ${editable?`<button type="button" class="btn d sm" data-del="${i}" aria-label="مسح البند">✕</button>`:""}</div>`;}).join("")}</div>
-   ${editable?`<button type="button" class="btn g" id="xAdd">+ بند جديد</button>`:""}
+   ${editable?`<button type="button" class="btn g" id="xAdd">+ بند جديد</button>
+   <div class="row"><button type="button" class="btn g sm" id="xTpl">⬇️ تمبلت Excel</button><label class="btn g sm" for="xUp" style="cursor:pointer">📤 رفع من Excel</label><input type="file" id="xUp" accept=".xlsx,.xls" hidden><span class="small muted">الرفع بيستبدل البنود اللي فوق</span></div>`:""}
    <div class="tot"><span>الإجمالي TOTAL</span><b class="num">${f2(tot)} ر.س</b></div>
    ${Object.keys(bt).length?`<div class="tw"><table><tbody>${Object.entries(bt).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${tl(k)}</td><td class="num" style="text-align:end">${f2(v)}</td></tr>`).join("")}</tbody></table></div>`:""}
   </section>
@@ -525,10 +529,45 @@ function readSettings(){const C=S.cfg;C.appName=$("#sApp").value.trim();C.manage
   const ar={};document.querySelectorAll("[data-area]").forEach(el=>{const c=lines(el.value);if(c.length)ar[el.dataset.area]=c;});C.lists.areas=ar;}
 
 /* ---------- Excel (SheetJS) ---------- */
+
+/* ---------- Excel template (download prefilled / upload filled) ---------- */
+function loadJSZip(){if(window.JSZip)return Promise.resolve();return new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";s.onload=res;s.onerror=()=>rej(new Error("مقدرناش نحمّل أداة Excel — اتأكد من الإنترنت"));document.head.appendChild(s);});}
+const XE=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+function xSet(xml,a,v){const re=new RegExp('<c r="'+a+'"([^>]*?)(/>|>[\\s\\S]*?</c>)');const m=xml.match(re);if(!m)return xml;const sm=m[1].match(/ s="\d+"/);const s=sm?sm[0]:"";
+  let c;if(v===""||v==null)c='<c r="'+a+'"'+s+'/>';else if(typeof v==="number")c='<c r="'+a+'"'+s+' t="n"><v>'+v+'</v></c>';else c='<c r="'+a+'"'+s+' t="inlineStr"><is><t xml:space="preserve">'+XE(v)+'</t></is></c>';
+  return xml.replace(re,c);}
+function xlDate(d){const p=String(d||"").split("-");if(p.length!==3)return "";return (Date.UTC(+p[0],+p[1]-1,+p[2])-Date.UTC(1899,11,30))/86400000;}
+async function fillTplZip(zip,emp,sh,rates,months){
+  const P="xl/worksheets/sheet1.xml";let x=await zip.file(P).async("string");
+  const S={D6:emp.dept||"Diagnostics",D7:emp.name||"",D8:emp.position||"",D9:emp.mobile||"",D10:emp.email||"",D11:emp.empNo||"",D12:emp.iban||"",I7:emp.grade||"Staff",
+    F6:sh.area||"",F7:sh.city||"",F8:months[(sh.month||1)-1],F9:Number(sh.year)||new Date().getFullYear(),D13:sh.travel==="International"?"International":"Domestic"};
+  Object.keys(S).forEach(a=>{x=xSet(x,a,S[a]);});
+  const fixed=t=>/^Daily Allowance|^Car Allowance/.test(t||"");
+  (sh.lines||[]).filter(l=>l.type).slice(0,60).forEach((l,i)=>{const r=15+i;x=xSet(x,"C"+r,xlDate(l.date));x=xSet(x,"D"+r,l.type);x=xSet(x,"E"+r,l.desc||"");
+    if(!(fixed(l.type)&&sh.travel!=="International")&&l.amount!==""&&l.amount!=null)x=xSet(x,"F"+r,Number(l.amount)||0);});
+  zip.file(P,x);
+  const SP="xl/worksheets/sheet3.xml";if(zip.file(SP)){let y=await zip.file(SP).async("string");const st={A2:emp.name||"",B2:emp.position||"",C2:emp.dept||"",D2:emp.mobile||"",E2:emp.email||"",F2:emp.empNo||"",G2:emp.iban||"",H2:emp.grade||"Staff"};Object.keys(st).forEach(a=>{y=xSet(y,a,st[a]);});zip.file(SP,y);}
+  const R="xl/worksheets/sheet4.xml";if(rates&&rates.grades&&zip.file(R)){let y=await zip.file(R).async("string");
+    [["Staff",2],["Sales Manager",3],["Department Manager",4]].forEach(([g,r])=>{const q=rates.grades[g];if(q){y=xSet(y,"B"+r,Number(q.full)||0);y=xSet(y,"C"+r,Number(q.half)||0);}});
+    const c=rates.car||{};if("Car Allowance 200- 300 K.M" in c)y=xSet(y,"F2",Number(c["Car Allowance 200- 300 K.M"])||0);if("Car Allowance up to 350 K.M" in c)y=xSet(y,"F3",Number(c["Car Allowance up to 350 K.M"])||0);
+    zip.file(R,y);}
+}
+
+let TPL64=null;
+async function downloadTemplate(emp,sh){await loadJSZip();if(!TPL64)TPL64=await call("apiTemplate");
+  const zip=await JSZip.loadAsync(TPL64,{base64:true});await fillTplZip(zip,emp||{},sh||{},RATES,MONTHS);
+  const blob=await zip.generateAsync({type:"blob",compression:"DEFLATE",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const name=`Expense - ${(emp&&emp.name)||"HMC"} - ${MONTHS[((sh&&sh.month)||1)-1]} ${(sh&&sh.year)||""}${sh&&sh.travel==="International"?" International":""}.xlsx`;
+  const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},4000);}
+function normType(t,travel){const all=(travel==="International"?LISTS.intl:LISTS.dom).concat(LISTS.dom,LISTS.intl);const k=String(t||"").trim().toLowerCase().replace(/\s+/g," ");return all.find(x=>x.toLowerCase().replace(/\s+/g," ")===k)||String(t||"").trim();}
+async function readFilled(file){const d=parseExpense(await readWb(file),file);if(!d.lines.length)throw new Error("الملف مفيهوش بنود — املا عمود نوع المصروف وارفعه تاني");
+  d.lines=d.lines.map(l=>({date:l.date,type:normType(l.type,d.travel),desc:l.desc,amount:l.amount}));return d;}
+function applyFilled(x,d,grade){if(d.month)x.month=d.month;if(d.year)x.year=d.year;x.travel=d.travel;if(d.area)x.area=d.area;if(d.city)x.city=d.city;
+  x.lines=d.lines.map(l=>{const fx=fixedAmt(grade||"Staff",x.travel,l.type);return {...l,amount:fx!=null?fx:l.amount};});}
 function loadXLSX(){if(window.XLSX)return Promise.resolve();return new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";s.onload=res;s.onerror=()=>rej(new Error("مقدرناش نحمّل أداة Excel — اتأكد من الإنترنت"));document.head.appendChild(s);});}
 async function readWb(file){await loadXLSX();const buf=await file.arrayBuffer();return XLSX.read(buf,{cellDates:true});}
 function cv(ws,a){const c=ws[a];return c?(c.v instanceof Date?c.v:c.v):"";}
-function ymd(d){if(!(d instanceof Date)||isNaN(d))return "";return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function ymd(d){if(!(d instanceof Date)||isNaN(d))return "";d=new Date(d.getTime()+43200000);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function parseExpense(wb,file){const ws=wb.Sheets["Expense Sheet"]||wb.Sheets[wb.SheetNames[0]];const mon=String(cv(ws,"F8")).trim();let m=MONTHS.findIndex(x=>x.toLowerCase()===mon.toLowerCase())+1;if(!m&&Number(mon))m=Number(mon);
   const lines=[];for(let r=15;r<=150;r++){const b=String(cv(ws,"B"+r)).trim().toUpperCase();if(b.startsWith("TOTAL"))break;const type=String(cv(ws,"D"+r)).trim();if(!type)continue;const dv=cv(ws,"C"+r);
     lines.push({date:dv instanceof Date?ymd(dv):String(dv||"").slice(0,10),type,desc:String(cv(ws,"E"+r)||"").trim(),amount:Number(cv(ws,"F"+r))||0});}
@@ -545,9 +584,9 @@ async function exportXlsx(){await loadXLSX();const L=filtered();const wb=XLSX.ut
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ln),"Lines");
   XLSX.writeFile(wb,`HMC Expenses ${S.f.year||"All"}${S.f.month?"-"+String(S.f.month).padStart(2,"0"):""}.xlsx`);}
 
-/* ---------- bindings ---------- */
+ 
 function bindAll(){
-  // login
+  
   const ld=$("#lDept");if(ld)ld.onchange=()=>{S.ldept=ld.value;render();};
   const lg=$("#lGo");if(lg)lg.onclick=async()=>{const id=$("#lName").value,pin=$("#lPin").value.trim(),er=$("#lErr");er.hidden=true;if(!id||!pin){er.textContent="اختار اسمك واكتب الرقم السري";er.hidden=false;return;}
     lg.disabled=true;lg.textContent="جارِ الدخول…";try{const st=await call("apiLogin",id,pin);S.state=st;S.me=st.me;S.pin=pin;store.set("eme",{id,pin});S.view=st.queue.length?"queue":"mine";render();}catch(ex){er.textContent=ex.message;er.hidden=false;lg.disabled=false;lg.textContent="دخول";}};
@@ -556,9 +595,16 @@ function bindAll(){
   const mg=$("#mGo");if(mg)mg.onclick=async()=>{const pin=$("#mPin").value.trim(),er=$("#mErr");er.hidden=true;mg.disabled=true;try{S.dash=await call("apiDash",pin);S.mgrPin=pin;store.set("emgr",pin);LISTS=S.dash.lists;RATES=S.dash.rates;render();}catch(ex){er.textContent=ex.message;er.hidden=false;mg.disabled=false;}};
   const mp=$("#mPin");if(mp)mp.onkeydown=e=>{if(e.key==="Enter")$("#mGo").click();};
   const mf=$("#mForgot");if(mf)mf.onclick=async()=>{mf.disabled=true;try{$("#mMsg").textContent=await call("apiForgotMgr");}catch(ex){$("#mMsg").textContent=ex.message;}mf.disabled=false;};
-  // employee
+  
   const ng=$("#nGo");if(ng)ng.onclick=()=>{const m=+$("#nMonth").value,y=+$("#nYear").value,t=$("#nTravel").value;const ex=S.state.mine.find(s=>s.month===m&&s.year===y&&s.travel===t);if(ex){openSheet(ex,"own");toast("الشيت ده موجود — كمّل عليه");return;}
     openSheet({id:"",emp:S.me.id,empName:S.me.name,month:m,year:y,travel:t,area:"",city:"",status:"draft",lines:[{date:"",type:"",desc:"",amount:""}],history:[]},"own");};
+  const nt=$("#nTpl");if(nt)nt.onclick=async()=>{nt.disabled=true;nt.textContent="جارِ التجهيز…";try{await downloadTemplate(S.me,{month:+$("#nMonth").value,year:+$("#nYear").value,travel:$("#nTravel").value,lines:[]});toast("اتنزّل التمبلت ✓");}catch(ex){toast(ex.message);}nt.disabled=false;nt.textContent="⬇️ نزّل التمبلت";};
+  const nu=$("#nUp");if(nu)nu.onchange=async()=>{const m=$("#nUpMsg");m.textContent="جارِ قراءة الملف…";try{const d=await readFilled(nu.files[0]);
+    const ex=S.state.mine.find(s=>s.month===d.month&&s.year===d.year&&s.travel===d.travel);
+    if(ex&&!(ex.status==="draft"||ex.status==="returned"))throw new Error(`عندك شيت ${mname(d.month)} ${d.year} وهو مع المراجعين — مينفعش يتعدّل`);
+    const x=ex?JSON.parse(JSON.stringify(ex)):{id:"",emp:S.me.id,empName:S.me.name,status:"draft",lines:[],history:[]};applyFilled(x,d,S.me.grade);
+    S.ed={x,mode:"own",dirty:true};render();window.scrollTo(0,0);
+    toast(`اتنقل ${d.lines.length} بند من الملف — راجعهم واحفظ`);if(d.empName&&d.empName.toLowerCase()!==String(S.me.name).toLowerCase())setTimeout(()=>toast(`تنبيه: الاسم في الملف «${d.empName}»`),3200);}catch(ex){m.innerHTML=`<span style="color:var(--bad)">${esc(ex.message)}</span>`;}nu.value="";};
   document.querySelectorAll("[data-open]").forEach(b=>b.onclick=async()=>{const id=b.dataset.open;
     if(S.view==="mgr"){openSheet(S.dash.sheets.find(s=>s.id===id),"mgr");return;}
     const own=S.state.mine.find(s=>s.id===id);if(own){openSheet(own,"own");return;}
@@ -567,6 +613,11 @@ function bindAll(){
   if(S.ed){const E=S.ed;
     document.querySelectorAll("#app input,#app select").forEach(el=>{if(el.id==="xNote")return;el.addEventListener("change",()=>{E.dirty=true;readEditor();if(["xArea","xTravel","xEmp"].includes(el.id)||el.dataset.k==="type"){if(el.id==="xArea")E.x.city="";render();}});});
     const ad=$("#xAdd");if(ad)ad.onclick=()=>{readEditor();const last=E.x.lines[E.x.lines.length-1];E.x.lines.push({date:last?last.date:"",type:"",desc:"",amount:""});E.dirty=true;render();const ins=document.querySelectorAll('[data-k="type"]');if(ins.length)ins[ins.length-1].focus();};
+    const empOf=()=>E.mode==="mgr"?(S.dash.emps.find(e=>e.id===E.x.emp)||{}):S.me;
+    const xt=$("#xTpl");if(xt)xt.onclick=async()=>{readEditor();if(E.mode==="mgr"&&!E.x.emp){toast("اختار الموظف الأول");return;}xt.disabled=true;try{await downloadTemplate(empOf(),E.x);toast("اتنزّل التمبلت ✓");}catch(ex){toast(ex.message);}xt.disabled=false;};
+    const xu=$("#xUp");if(xu)xu.onchange=async()=>{readEditor();try{const d=await readFilled(xu.files[0]);
+      if(E.x.id&&(d.month!==E.x.month||d.year!==E.x.year||d.travel!==E.x.travel))toast("الشهر/النوع في الملف مختلف — اتعدّل على الملف");
+      applyFilled(E.x,d,empOf().grade);E.dirty=true;render();toast(`اتنقل ${d.lines.length} بند — راجعهم واحفظ`);}catch(ex){toast(ex.message);}xu.value="";};
     document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{readEditor();E.x.lines.splice(+b.dataset.del,1);E.dirty=true;render();});
     const msg=t=>{const m=$("#xMsg");if(m)m.innerHTML=t;};
     const sv=$("#xSave");if(sv)sv.onclick=async()=>{readEditor();sv.disabled=true;msg("جارِ الحفظ…");try{
@@ -583,7 +634,7 @@ function bindAll(){
       b.disabled=true;try{if(E.dirty){readEditor();await call("apiMgrSaveSheet",S.mgrPin,{...payload(),emp:E.x.emp});}const r=await call("apiMgrStage",S.mgrPin,E.x.id,a,n);S.dash=await call("apiDash",S.mgrPin);
         if(r&&r.deleted){S.ed=null;}else{E.x=S.dash.sheets.find(s=>s.id===E.x.id)||r;E.dirty=false;}render();toast("تم ✓");}catch(ex){toast(ex.message);b.disabled=false;}});
   }
-  
+  // manager
   document.querySelectorAll("[data-mtab]").forEach(b=>b.onclick=async()=>{S.mtab=b.dataset.mtab;S.empEdit=null;render();});
   if(S.view==="mgr"&&S.mgrPin&&S.mtab==="set"&&!S.cfg&&!S.cfgLoading){S.cfgLoading=true;call("apiGetSettings",S.mgrPin).then(c=>{S.cfg=c;S.cfgLoading=false;render();}).catch(ex=>{S.cfgLoading=false;toast(ex.message);});}
   document.querySelectorAll("[data-f]").forEach(el=>el.onchange=()=>{S.f[el.dataset.f]=el.value;render();});
@@ -603,7 +654,7 @@ function bindAll(){
     const r=await call("apiImportEmployees",S.mgrPin,list);S.dash=await call("apiDash",S.mgrPin);m.innerHTML=`<div class="banner b-ok">✓ اتضاف ${r.added} واتحدّث ${r.updated}</div>`;}catch(ex){m.textContent=ex.message;}};
   const is=$("#impSh");if(is)is.onchange=async()=>{const m=$("#impShMsg");m.textContent="جارِ القراءة…";try{const list=[];for(const f of is.files){list.push(parseExpense(await readWb(f),f));}
     const r=await call("apiImportSheets",S.mgrPin,list);S.dash=await call("apiDash",S.mgrPin);m.innerHTML=r.map(x=>x.ok?`<div class="banner b-ok" style="margin-top:6px">✓ ${esc(x.file)} — ${esc(x.emp)} · ${x.lines} بند · ${f2(x.total)} ر.س${x.updated?" (اتحدّث)":""}</div>`:`<div class="banner b-err" style="margin-top:6px">✕ ${esc(x.file)} — ${esc(x.error)}</div>`).join("");}catch(ex){m.textContent=ex.message;}};
-  
+  // settings
   if(S.cfg&&$("#sSave")){const C=S.cfg;
     const ga=$("#gAdd");if(ga)ga.onclick=()=>{readSettings();C.rates.grades["New grade"]={full:0,half:0};render();};
     document.querySelectorAll("[data-gdel]").forEach(b=>b.onclick=()=>{readSettings();const k=Object.keys(C.rates.grades)[+b.dataset.gdel];delete C.rates.grades[k];render();});
