@@ -441,7 +441,8 @@ function viewEditor(){const E=S.ed,x=E.x,mgr=E.mode==="mgr";
      <input data-l="${i}" data-k="amount" type="number" step="0.01" min="0" inputmode="decimal" value="${l.amount===""||l.amount==null?"":l.amount}" placeholder="المبلغ" ${dis||fx!=null?"disabled":""} class="num" aria-label="المبلغ">
      ${editable?`<button type="button" class="btn d sm" data-del="${i}" aria-label="مسح البند">✕</button>`:""}</div>`;}).join("")}</div>
    ${editable?`<button type="button" class="btn g" id="xAdd">+ بند جديد</button>
-   <div class="row"><button type="button" class="btn g sm" id="xTpl">⬇️ تمبلت Excel</button><label class="btn g sm" for="xUp" style="cursor:pointer">📤 رفع من Excel</label><input type="file" id="xUp" accept=".xlsx,.xls" hidden><span class="small muted">الرفع بيستبدل البنود اللي فوق</span></div>`:""}
+   <div class="row"><button type="button" class="btn g sm" id="xTpl">⬇️ تمبلت Excel</button><label class="btn g sm" for="xUp" style="cursor:pointer">📤 رفع من Excel</label><input type="file" id="xUp" accept=".xlsx,.xls" hidden><span class="small muted">الرفع بيستبدل البنود اللي فوق</span></div>
+   <div class="row"><button type="button" class="btn g sm" id="xVis">📍 هات أيام زياراتي من نبض الميدان</button></div><div id="xVisBox"></div>`:""}
    <div class="tot"><span>الإجمالي TOTAL</span><b class="num">${f2(tot)} ر.س</b></div>
    ${Object.keys(bt).length?`<div class="tw"><table><tbody>${Object.entries(bt).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${tl(k)}</td><td class="num" style="text-align:end">${f2(v)}</td></tr>`).join("")}</tbody></table></div>`:""}
   </section>
@@ -614,6 +615,16 @@ function bindAll(){
     document.querySelectorAll("#app input,#app select").forEach(el=>{if(el.id==="xNote")return;el.addEventListener("change",()=>{E.dirty=true;readEditor();if(["xArea","xTravel","xEmp"].includes(el.id)||el.dataset.k==="type"){if(el.id==="xArea")E.x.city="";render();}});});
     const ad=$("#xAdd");if(ad)ad.onclick=()=>{readEditor();const last=E.x.lines[E.x.lines.length-1];E.x.lines.push({date:last?last.date:"",type:"",desc:"",amount:""});E.dirty=true;render();const ins=document.querySelectorAll('[data-k="type"]');if(ins.length)ins[ins.length-1].focus();};
     const empOf=()=>E.mode==="mgr"?(S.dash.emps.find(e=>e.id===E.x.emp)||{}):S.me;
+    const xv=$("#xVis");if(xv)xv.onclick=async()=>{readEditor();if(E.mode==="mgr"&&!E.x.emp){toast("اختار الموظف الأول");return;}const box=$("#xVisBox");box.innerHTML='<div class="small muted">جارِ جلب الزيارات…</div>';
+      try{const r=E.mode==="mgr"?await call("apiMgrVisitDays",S.mgrPin,E.x.emp,E.x.month,E.x.year):await call("apiVisitDays",S.me.id,S.pin,E.x.month,E.x.year);
+        if(!r.linked){box.innerHTML='<div class="small" style="color:var(--bad)">الحساب مش مربوط بنبض الميدان — المدير يربطه من بوابة HMC</div>';return;}
+        if(!r.days.length){box.innerHTML='<div class="small muted">مفيش زيارات متسجلة في الشهر ده</div>';return;}
+        const have=new Set(E.x.lines.filter(l=>/^Daily Allowance/.test(l.type||"")).map(l=>l.date));
+        const al=(E.x.travel==="International"?[]:LISTS.dom.filter(t=>/^Daily Allowance/.test(t)));
+        box.innerHTML=`<div class="xlbox"><b>📍 ${r.days.length} يوم زيارات في ${mname(E.x.month)} ${E.x.year}</b><div class="small muted">علّم الأيام اللي عاوز تضيف لها بدل، واختار نوعه.</div>`+r.days.map((d,i)=>`<label class="row" style="gap:8px;align-items:center"><input type="checkbox" data-vd="${i}" ${have.has(d.date)?"disabled":"checked"}> <b>${d.date}</b> <span class="small">${esc(d.clients.slice(0,3).join("، "))}${d.cities.length?" — "+esc(d.cities.join("، ")):""}</span> ${have.has(d.date)?'<span class="small muted">(موجود)</span>':`<select data-vt="${i}" class="sm">${al.map(t=>`<option>${esc(t)}</option>`).join("")}</select>`}</label>`).join("")+`<div class="row"><button type="button" class="btn p sm" id="xVisAdd">أضف البنود</button></div></div>`;
+        $("#xVisAdd").onclick=()=>{readEditor();const add=[];r.days.forEach((d,i)=>{const c=box.querySelector(`[data-vd="${i}"]`),t=box.querySelector(`[data-vt="${i}"]`);if(c&&c.checked&&!c.disabled&&t){const fx=fixedAmt(empOf().grade||"Staff",E.x.travel,t.value);add.push({date:d.date,type:t.value,desc:"زيارة "+d.clients.slice(0,3).join("، ")+(d.cities.length?" — "+d.cities.join("، "):""),amount:fx!=null?fx:""});}});
+          if(!add.length){toast("مفيش أيام متعلّمة");return;}E.x.lines=E.x.lines.filter(l=>l.type||l.desc||l.amount).concat(add).sort((a,b)=>String(a.date).localeCompare(String(b.date)));E.dirty=true;render();toast(`اتضاف ${add.length} بند — راجع واحفظ`);};
+      }catch(ex){box.innerHTML=`<div class="small" style="color:var(--bad)">${esc(ex.message)}</div>`;}};
     const xt=$("#xTpl");if(xt)xt.onclick=async()=>{readEditor();if(E.mode==="mgr"&&!E.x.emp){toast("اختار الموظف الأول");return;}xt.disabled=true;try{await downloadTemplate(empOf(),E.x);toast("اتنزّل التمبلت ✓");}catch(ex){toast(ex.message);}xt.disabled=false;};
     const xu=$("#xUp");if(xu)xu.onchange=async()=>{readEditor();try{const d=await readFilled(xu.files[0]);
       if(E.x.id&&(d.month!==E.x.month||d.year!==E.x.year||d.travel!==E.x.travel))toast("الشهر/النوع في الملف مختلف — اتعدّل على الملف");
