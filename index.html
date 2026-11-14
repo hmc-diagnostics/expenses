@@ -340,6 +340,7 @@ const IC={mine:'<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/
 function drawNav(){
   const q=S.state&&S.state.queue?S.state.queue.length:0;const r=S.me&&S.me.role;
   const items=S.me?[["mine","شيتاتي"],...(r===ROLE_REV?[["queue","للمراجعة"]]:r===ROLE_APP?[["queue","للاعتماد"]]:[]),["mgr","لوحة المدير"]]:[["home","دخول الموظف"],["mgr","لوحة المدير"]];
+  if(!(/admin/i.test(location.search+location.hash)||S.mgrPin||S.view==="mgr")){const i=items.findIndex(x=>x[0]==="mgr");if(i>=0)items.splice(i,1);}
   $("#nav").innerHTML=items.map(([k,t])=>`<button type="button" data-v="${k}" ${S.view===k?'aria-current="page"':""}><i class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k]}</svg>${k==="queue"&&q?'<b class="ndot"></b>':""}</i><span>${t}${k==="queue"&&q?` (${q})`:""}</span></button>`).join("");
   $("#nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{S.view=b.dataset.v;S.ed=null;render();});
   $("#who").textContent=S.me?S.me.name:"HMC Diagnostics";
